@@ -1,0 +1,7 @@
+/target
+.env
+token_cache.json
+.direnv/
+result
+.envrc.local
+.env.example
