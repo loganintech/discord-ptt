@@ -8,10 +8,14 @@ use evdev::KeyCode;
 use input::{ButtonState, InputListener};
 use ipc::IpcConnection;
 use std::path::Path;
+use std::process::Command;
+
+const SERVICE_NAME: &str = "discord-ptt";
 
 fn usage() {
     eprintln!("Usage:");
-    eprintln!("  discord-ptt                           Run PTT (first run triggers setup)");
+    eprintln!("  discord-ptt                           Run PTT in foreground");
+    eprintln!("  discord-ptt toggle                    Start or stop PTT service");
     eprintln!("  discord-ptt setup                     Re-run button detection setup");
     eprintln!("  discord-ptt bench [iterations]        Benchmark IPC latency");
     eprintln!("  discord-ptt list-devices              List available input devices");
@@ -22,6 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = args.get(1).map(|s| s.as_str());
 
     match cmd {
+        Some("toggle") => run_toggle(),
         Some("setup") => {
             run_setup()?;
             Ok(())
@@ -36,7 +41,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         None => {
-            // Load config or run setup if none exists
             let cfg = match config::load() {
                 Some(cfg) => {
                     eprintln!(
@@ -69,6 +73,36 @@ fn connect_and_auth() -> Result<IpcConnection, Box<dyn std::error::Error>> {
     let mut conn = IpcConnection::connect()?;
     auth::authenticate(&mut conn, client_id, client_secret)?;
     Ok(conn)
+}
+
+fn is_service_active() -> bool {
+    Command::new("systemctl")
+        .args(["--user", "is-active", "--quiet", SERVICE_NAME])
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+fn run_toggle() -> Result<(), Box<dyn std::error::Error>> {
+    if is_service_active() {
+        let status = Command::new("systemctl")
+            .args(["--user", "stop", SERVICE_NAME])
+            .status()?;
+        if status.success() {
+            eprintln!("PTT stopped");
+        } else {
+            return Err("Failed to stop service".into());
+        }
+    } else {
+        let status = Command::new("systemctl")
+            .args(["--user", "start", SERVICE_NAME])
+            .status()?;
+        if status.success() {
+            eprintln!("PTT started");
+        } else {
+            return Err("Failed to start service. Is the discord-ptt service installed?".into());
+        }
+    }
+    Ok(())
 }
 
 fn run_setup() -> Result<config::Config, Box<dyn std::error::Error>> {

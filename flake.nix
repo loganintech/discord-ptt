@@ -8,8 +8,11 @@
     };
   };
 
-  outputs = { nixpkgs, flake-utils, rust-overlay, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
+    {
+      nixosModules.default = import ./nix/module.nix;
+    }
+    // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -27,10 +30,10 @@
         };
 
         packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "discord-ptt-bench";
+          pname = "discord-ptt";
           version = "0.1.0";
           src = ./.;
-          cargoHash = "sha256-ViXV9YpWuLbh9sXPOgvC/jzAktEv+kK4fGmi9LJCWLo=";
+          cargoHash = "sha256-BsX2VcNCWj7slGTFbupe7iMoSOipNg9HwNLgHYjjd6c=";
           nativeBuildInputs = with pkgs; [ pkg-config ];
           buildInputs = with pkgs; [ openssl ];
         };
