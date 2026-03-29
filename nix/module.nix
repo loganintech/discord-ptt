@@ -11,12 +11,19 @@ in
       type = lib.types.package;
       description = "The discord-ptt package to use.";
     };
+
+    credentialsFile = lib.mkOption {
+      type = lib.types.path;
+      description = ''
+        Path to an EnvironmentFile containing DISCORD_PTT_CLIENT_ID and
+        DISCORD_PTT_CLIENT_SECRET, one per line in KEY=VALUE format.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
-    # Ensure the user can read input devices
     users.groups.input = {};
 
     systemd.user.services.discord-ptt = {
@@ -26,6 +33,7 @@ in
       serviceConfig = {
         Type = "simple";
         ExecStart = "${cfg.package}/bin/discord-ptt";
+        EnvironmentFile = cfg.credentialsFile;
         Restart = "on-failure";
         RestartSec = 3;
       };

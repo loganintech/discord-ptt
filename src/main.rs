@@ -64,14 +64,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+fn get_credential(env_var: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // 1. Runtime env var (e.g. from systemd EnvironmentFile)
+    if let Ok(val) = std::env::var(env_var) {
+        return Ok(val);
+    }
+    // 2. File path env var (e.g. DISCORD_PTT_CLIENT_ID_FILE=/run/agenix/...)
+    let file_var = format!("{env_var}_FILE");
+    if let Ok(path) = std::env::var(&file_var) {
+        return std::fs::read_to_string(&path)
+            .map(|s| s.trim().to_string())
+            .map_err(|e| format!("Failed to read {file_var} ({path}): {e}").into());
+    }
+    // 3. Compile-time env var (from .env at build time)
+    let compile_time = match env_var {
+        "DISCORD_PTT_CLIENT_ID" => option_env!("DISCORD_PTT_CLIENT_ID"),
+        "DISCORD_PTT_CLIENT_SECRET" => option_env!("DISCORD_PTT_CLIENT_SECRET"),
+        _ => None,
+    };
+    if let Some(val) = compile_time {
+        return Ok(val.to_string());
+    }
+    Err(format!("{env_var} not set. Set it via env var, {env_var}_FILE, or .env at build time.").into())
+}
+
 fn connect_and_auth() -> Result<IpcConnection, Box<dyn std::error::Error>> {
-    let client_id =
-        option_env!("CLIENT_ID").ok_or("CLIENT_ID not set. Add it to .env and rebuild.")?;
-    let client_secret =
-        option_env!("CLIENT_SECRET").ok_or("CLIENT_SECRET not set. Add it to .env and rebuild.")?;
+    let client_id = get_credential("DISCORD_PTT_CLIENT_ID")?;
+    let client_secret = get_credential("DISCORD_PTT_CLIENT_SECRET")?;
 
     let mut conn = IpcConnection::connect()?;
-    auth::authenticate(&mut conn, client_id, client_secret)?;
+    auth::authenticate(&mut conn, &client_id, &client_secret)?;
     Ok(conn)
 }
 
