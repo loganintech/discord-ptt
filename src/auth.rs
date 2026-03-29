@@ -2,10 +2,18 @@ use crate::ipc::{IpcConnection, Opcode};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
-use std::path::Path;
 
-const TOKEN_CACHE_PATH: &str = "token_cache.json";
 const REDIRECT_URI: &str = "http://localhost";
+
+fn token_cache_path() -> std::path::PathBuf {
+    let config_dir = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            std::path::PathBuf::from(home).join(".config")
+        });
+    config_dir.join("discord-ptt").join("token.json")
+}
 
 #[derive(Serialize, Deserialize)]
 struct TokenCache {
@@ -35,7 +43,7 @@ pub fn authenticate(conn: &mut IpcConnection, client_id: &str, client_secret: &s
             }
             Err(e) => {
                 eprintln!("Cached token failed ({e}), starting fresh auth flow...");
-                let _ = fs::remove_file(TOKEN_CACHE_PATH);
+                let _ = fs::remove_file(token_cache_path());
             }
         }
     }
@@ -65,7 +73,11 @@ pub fn authenticate(conn: &mut IpcConnection, client_id: &str, client_secret: &s
     };
     let cache_json = serde_json::to_string_pretty(&cache)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    fs::write(TOKEN_CACHE_PATH, cache_json)?;
+    let cache_path = token_cache_path();
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(cache_path, cache_json)?;
 
     // Step 6: Authenticate
     try_authenticate(conn, &token)?;
@@ -84,8 +96,7 @@ fn try_authenticate(conn: &mut IpcConnection, token: &str) -> io::Result<()> {
 }
 
 fn load_cached_token() -> Option<String> {
-    let path = Path::new(TOKEN_CACHE_PATH);
-    let data = fs::read_to_string(path).ok()?;
+    let data = fs::read_to_string(token_cache_path()).ok()?;
     let cache: TokenCache = serde_json::from_str(&data).ok()?;
     Some(cache.access_token)
 }
