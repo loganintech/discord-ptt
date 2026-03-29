@@ -14,6 +14,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    environment.systemPackages = [ cfg.package ];
+
     # Ensure the user can read input devices
     users.groups.input = {};
 
