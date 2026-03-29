@@ -76,6 +76,23 @@ pub struct DetectedButton {
     pub button: KeyCode,
 }
 
+/// Resolve an eventN path to its stable /dev/input/by-id/ symlink if one exists.
+fn resolve_stable_path(event_path: &Path) -> PathBuf {
+    let by_id = Path::new("/dev/input/by-id");
+    if let Ok(entries) = std::fs::read_dir(by_id) {
+        for entry in entries.flatten() {
+            if let Ok(target) = std::fs::canonicalize(entry.path()) {
+                if let Ok(canonical_event) = std::fs::canonicalize(event_path) {
+                    if target == canonical_event {
+                        return entry.path();
+                    }
+                }
+            }
+        }
+    }
+    event_path.to_path_buf()
+}
+
 /// Opens all input devices and waits for a button press on any of them.
 /// Ignores common noise like BTN_LEFT, BTN_RIGHT, and regular keys.
 pub fn detect_button() -> io::Result<DetectedButton> {
@@ -124,8 +141,9 @@ pub fn detect_button() -> io::Result<DetectedButton> {
                         continue;
                     }
                     let device_name = device.name().unwrap_or("Unknown").to_string();
+                    let stable_path = resolve_stable_path(path);
                     return Ok(DetectedButton {
-                        path: path.clone(),
+                        path: stable_path,
                         device_name,
                         button: code,
                     });
